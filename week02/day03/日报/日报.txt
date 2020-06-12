@@ -1,0 +1,381 @@
+2020-6-1
+ElasticSearch
+一、ElasticSearch介绍
+   1、什么是elasticsearch?
+	elasticsearch是基于lucene的全文检索服务器，对外提供restful接口
+
+   2、elasticsearch原理
+	 正排索引：查字典时从第一页开始找，直到找到关键字为止（CTRL+F）
+	 倒排索引：查字典时通过目录查找
+
+	 逻辑结构：一个倒排索引表，由三部分组成
+		document
+		term
+		term----关联----document
+
+二、ES安装
+	a、安装
+		1、设置虚拟机内存>1.5G
+		2、创建用户
+		3、安装
+			解压即安装
+			配置elasticsearch.yml
+		4、解决内核问题
+		5、解决文件创建权限问题
+		6、决绝线程开启限制问题
+		7、解决虚拟机内存问题
+
+	b、启动和关闭
+		启动：
+			./bin/elasticsearch
+			./elasticsearch -d
+
+		关闭：
+			kill -9 pid
+
+三、ES快速入门
+ 1、index管理
+	a、创建index
+		PUT /java1906
+		{
+		   "settings"{
+			"number_of_shards":2,
+			"number_of_replicas":0 #备份分配不允许和主分片在同一个节点上
+		   }
+		}
+
+	b、修改index
+		PUT /java1906/_settings
+		{
+		  "number_of_replicas":1 #主分片不能修改【hash(doc_id)%number_of_shards=shard】
+		}
+
+	c、删除index
+		DELETE /java1906
+
+ 2、mapping管理
+	a、关键mapping
+		POST /java1906/course/_mapping
+		{
+			"properties":{
+				"name":{
+					"type":"text"
+				}
+			}
+		}
+
+	b、查询mapping
+		GET /java1906/couse/_mapping
+
+  3、doucument管理
+	a、创建doucment
+		POST /java1907/couse/1
+		{
+			"name":"php从入门到放弃"
+		}
+		POST /java1907/couse
+		{
+			"name":"php从入门到放弃"
+		}
+		PUT /java1907/couse/1
+		{
+			"name":"php从入门到放弃"
+		}
+	b、查询doucument
+		GET /java1906/couse/1
+
+	c、删除document
+		DELETE /java1906/couse/1
+2020-6-2
+四、IK分词器
+   1、安装
+	解压到plugs目录下，并重命名为ik
+
+    2、自定义词库
+	IkAnalyzer.cfg.xml：配置扩展词典和停用词典
+	main.dic：扩展词典
+	stopwords.dic：停用词典
+
+    3、两种分词模式
+	ik_smart：粗粒度拆分
+	ik_max_word：细粒度拆分
+
+五、field详细介绍
+	  a、field的属性
+		type：field的类型
+		analyzer：分词模式、ik_smart、ik_max_word
+		index：创建doucument和分词列表
+		field索引不存储：
+			"_source":{
+				"excludes":{"description"}
+			}
+
+	  b、常用的field类型
+		文本字段：
+			text
+		关键字字段：索引时不分词
+			keyword
+		日期字段：
+			date
+		数字字段
+			long、integer、double、float
+
+
+	d、field属性设置的标准
+
+					标准
+
+		分词                  是否有意义
+		索引                  是否搜索
+		存储                  是否展示
+
+2020-6-3
+六、springboot整合ES
+ a、整合步骤
+	1、pom.xml
+		elasticsearch、elasticsearch-rest-high-level-client
+
+	2、application.yml
+		spring:
+		  data:
+		    elasticsearch:
+		      cluster-nodes: 192.168.233.134:9200
+	3、config
+		@Configuration
+		public class ElasticsearchConfig extends ElasticsearchProperties{
+
+			@Bean
+			public RestHighLevelClient getRestHighLevelClient() {
+			String[] hosts = getClusterNodes().split(",");
+			HttpHost[] httpHosts = new HttpHost[hosts.length];
+			for (int i = 0; i < httpHosts.length; i++) {
+			    String h = hosts[i];
+			    httpHosts[i] = new HttpHost(h.split(":")[0],
+							Integer.parseInt(h.split(":")[1]));
+			}
+				return new RestHighLevelClient(RestClient.builder(httpHosts));
+			}
+		}
+
+ b、删除索引库
+	DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest("java1906");
+	restHighLevelClient.indices().delete(deleteIndexRequest,RequestOptions.DEFAULT);
+
+ c、创建索引库
+	CreateIndexRequest createIndexRequest = new CreateIndexRequest("java1906");
+	createIndexRequest.settings("");
+	createIndexRequest.mapping("");
+	restHighLevelClient.indices().create(createIndexRequest,RequestOptions.DEFAULT)
+
+ d、	添加文档
+	IndexRequest indexRequest = new IndexRequest("java1906", "course", "1");
+	indexRequest.source();
+	restHighLevelClient.index(indexRequest,RequestOptions.DEFAULT);
+
+ e、批量添加文档
+	BulkRequest bulkRequest = new BulkRequest();
+	bulkRequest.add(new IndexRequest("java1906", "course", "1").source(""));
+	bulkRequest.add(new IndexRequest("java1906", "course", "1").source(""));
+	restHighLevelClient.bulk(bulkRequest,RequestOptions.DEFAULT);
+
+ f、	修改文档
+	UpdateRequest updateRequest = new UpdateRequest("java1906", "course", "1");
+	indexRequest.doc("");
+	restHighLevelClient.update(indexRequest,RequestOptions.DEFAULT);
+
+ g、	删除文档
+	DeleteRequest deleteRequest = new DeleteRequest("java1906", "course", "1");
+	restHighLevelClient.delete(deleteRequest,RequestOptions.DEFAULT);
+
+ h、简单搜索
+	GetRequest getRequest = new GetRequest("java1906", "course", "1");
+	restHighLevelClient.get(getRequest,RequestOptions.DEFAULT);
+
+ i、dsl搜索
+	1、match_all
+		SearchRequest searchRequest = new SearchRequest("java1906");
+		searchRequest.types("course");
+
+		SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+		searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+
+		searchRequest.search(searchSourceBuilder)
+		restHighLevelClient.search(searchRequest,RequestOptions.DEFAULT);
+
+	 2、分页查询
+		SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+		searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+		searchSourceBuilder.form(1);
+		searchSourceBuilder.size(2);
+		searchSourceBuilder.sort("price",SortOrder.DESC);
+
+2020-6-5
+商品搜索
+索引库同步
+
+后台新增商品后需要把商品同步到索引库
+
+2.1.分析
+
+方案一：业务逻辑在usian_item_sevice中实现，添加商品的业务逻辑中，添加一个同步索引库的业务逻辑。
+
+缺点：
+
+	1、业务逻辑耦合度高（既维护商品又维护索引库）
+
+方案二：业务逻辑在usian_search_service中实现，usian_item_sevice先添加商品，再调用usian_search_service服务同步索引库。
+
+缺点：
+
+	1、系统间耦合性太强（如果将来其他服务接入，usian_item_sevice还需要修改代码）
+
+方案三：使用消息中间件
+
+
+
+  类型           	特点                                      
+  基本消息模型       	发送者------>queue----->消费者                
+  work消息模型     	发送者------>queue----->多个消费者              
+  广播-fanout消息模型	发送者----->exchange---->多个queue--->多个消费者  
+  定向-direct消息模式	发送者----->exchange---routing key-->多个queue--->多个消费者
+  通配符-topic消息模型	发送者----->exchange---星.routing key.星-->多个queue---->多个消费者
+
+
+
+网页静态化方案
+	1，创建商品详情的百里香模板
+
+	2，创建一个RabbitMQ的消费者，监听添加或修改商品的消息，收到消息后创建静态页面
+
+	3，建造nginx服务器，返回静态页面
+
+redis缓存商品信息方案
+	1，根据商品id到redis中查询
+
+			  查得到，直接返回
+
+	2，查不到，查询mysql，
+
+						 数据放到redis中
+
+				 设置缓存的有效期一天的时间
+
+代码：
+	公共TbItem selectItemInfo（Long itemId）{
+			//查询缓存
+			TbItem tbItem =（TbItem）redisClient.get（ITEM_INFO +“：” + itemId +“：” + BASE）;
+			if（tbItem！= null）{
+				返回tbItem;
+			}
+
+			tbItem = tbItemMapper.selectByPrimaryKey（itemId）;
+			//把数据保存到缓存
+			redisClient.set（ITEM_INFO +“：” + itemId +“：” + BASE，tbItem）;
+			//设置缓存的有效期
+			redisClient.expire（ITEM_INFO +“：” + itemId +“：” + BASE，ITEM_INFO_EXPIRE）;
+
+			返回tbItem;
+		}
+
+缓存同步
+	使用消息中间件实现redis中商品信息的同步：后台修改商品则直接删除redis中商品
+
+缓存突破
+	描述
+		缓存突破是指缓存和数据库中都没有的数据，而用户不断发起请求，
+		如发起为id为“ -1”的数据或id为特别大不存在的数据。
+		如果存在恶意攻击，就可以利用这个突破，对数据库造成压力，甚至压垮数据库。
+	解决方案
+		缓存空对象：
+		当存储层不命中中后，即使返回的空对象也将其缓存起来，
+		同时会设置一个过期时间（避免控制占用更多的存储空间），
+		之后再访问这个数据将会从缓存中获取，保护了先前数据源
+
+缓存击穿
+	描述
+		缓存击穿，是指一个键非常景点，在不停的搬运着大并发，大并发集中对这一个点进行访问，
+		当这个关键在失效的瞬间，持续的大并发就穿破缓存，直接请求数据库，就像在一个屏障上凿开了一个洞。
+	解决方案
+		1.设置景点数据永远不过期。
+		2.加分布式锁
+
+2020-06-09
+    1、单点登录介绍
+            SO英文全称Single Sign On，单点登录。SO是在多个应用系统中，用户只需要登录一次就可以访问所有相互信任的应用系统，
+        例如：【百度：百度文库、百度外卖】、【淘宝：淘宝、天猫】、【优思安：门户、搜索、商品详情】。它包括可以将这次主要的登
+        录映射到其他应用中用于同一个用户的登录的机制。它是目前比较流行的企业业务整合的解决方案之一。
+    2、为什么要有单点登录系统？
+        集群环境下会出现要求用户多次登录的情况。
+        解决方案：
+        1、配置tomcat集群(500)。配置tomcat Session复制。节点数不要超过5个。
+        2、可以使用Session服务器（sso系统），保存Session信息。需要模拟Session。
+        session和redis的共同特点：
+        1、kv形式存储
+        2、过期时间
+        单点登录系统是使用redis模拟Session，实现Session的统一管理。
+    3、需求分析
+        2.1.登录
+            把用户信息装到redis(token，user)，再把token装到cookie(token_key,token)
+        2.1.查询
+            先从cookie中取出token，再通过token从redis中查询用户信息
+    4、搭建工程
+        3.1.为什么要搭建工程
+        因为除了登录还有注册、退出登录等功能，模块复杂，根据分布式项目的各持其职，
+        所以要单独抽出来
+    5、做注册用户名和手机号不重复校验
+    6、注册用户功能
+        6.1.记得要加密密码，加密后写入到数据库中
+    7、登录功能
+        7.1、根据用户名密码登录
+        7.2、登录后用token作为key,TbUser作为值存到redis中
+        7.3、定义Map存入token、userid、username返回前台
+    8、根据token查看用户功能
+    9、退出登录
+        9.1、根据token删除user
+
+2020-06-10
+    1、购物车分析
+        1.1.购物车功能
+            1. 添加购物车商品
+            2. 展示购物车列表页面
+            3. 修改购物车商品数量
+            4. 删除购物车商品
+    2、购物车设计
+        2.1. 用户未登录状态下：在不登陆的情况下把购物车信息写入cookie
+           	优点：
+           		1、不占用服务端存储空间
+           		2、代码实现简单。
+           		3、用户体验好
+           	缺点：
+           		1、cookie中保存的容量有限。最大4k
+           		2、把购物车信息保存在cookie中，更换设备购物车信息不能同步。
+        2.2. 用户已登录状态下：把购物车信息保存到服务端的 Redis 中
+           	优点：
+           		1、更换设备购物车信息可以同步
+           	缺点：
+           		1、占用服务端存储空间
+    3、创建工程
+        usian_cart_service,usian_cart_feign,usian_cart_web
+
+    4、未登录状态操作购物车
+        4.1.业务逻辑：
+            1、从cookie中查询商品列表：Map<itemId,TbItem> 商品购买数量使用TbItem的num保存
+            	    购物车已存在则直接返回
+                    购物车不存在则创建空的购物车并返回
+            2、添加商品到购物车：
+            	如果购物车存在该商品，商品数量相加。
+            	如果购物车不存在该商品，根据商品id查询商品信息并添加到购车列表
+            3、把购车商品列表写入cookie。
+            	读写cookie可以使用CookieUtils工具类实现
+            4、查看列表
+                根据传过来的userId获取到map,然后遍历创建list进行存储返回
+            5、修改商品数量
+                根据传过来的num和itemId先获取到map,根据itemId查对应的value，然后赋值num,重新写到cookie
+            6、删除商品
+                根据传过来的itemId,获取到map.remove(itemId)重新赋值到cookie
+    5、登录状态操作购物车
+         添加商品
+        1、从cookie中查询商品列表：Map<itemId,TbItem> 商品购买数量使用TbItem的num保存
+             购物车已存在则直接返回
+             购物车不存在则创建空的购物车并返回
+             在添加商品到map的时候在判断商品是否重复
