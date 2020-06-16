@@ -1,0 +1,56 @@
+1.购物车的业务逻辑
+	在用户未登录情况下往购物车添加商品，添加结束用户登录，此时需把cookie中的数据同步到redis：
+
+​	a)  如果redis中有数据cookie中也有数据，需要做数据合并。相同商品数量相加，不同商品添加一个新商品。
+
+​	b)  把cookie中的数据删除，避免下次重复同步
+2.什么是拦截器？
+	拦截器类似于servlet中的过滤器，它主要用于拦截用户请求并做出对应的处理，例如通过拦截器可以进行权限验证，
+	记录请求信息的日志、记录请求信息的日志、判断用户是否登录等。
+3.用户身份验证
+	1、使用springmvc的拦截器拦截所有订单的请求
+		业务逻辑
+​	a)  从cookie中取token。
+
+​	b) 根据token调用sso服务查询用户信息。
+
+​	d) 如果查不到用户信息则跳转到登录页面。
+
+​	e) 查询到用户信息放行。
+4。拦截器代码
+	package com.usian.interceptor;
+
+	import com.usian.feign.SSOServiceFeign;
+	import com.usian.pojo.TbUser;
+	import org.apache.commons.lang.StringUtils;
+	import org.springframework.beans.factory.annotation.Autowired;
+	import org.springframework.stereotype.Component;
+	import org.springframework.web.servlet.HandlerInterceptor;
+	import javax.servlet.http.HttpServletRequest;
+	import javax.servlet.http.HttpServletResponse;
+
+	/**
+	 * 在结算之前判断用户是否登录
+	 */
+	@Component
+	public class UserLoginInterceptor implements HandlerInterceptor {
+
+    	@Autowired
+    	private SSOServiceFeign ssoServiceFeign;
+
+    	@Override
+    	public boolean preHandle(HttpServletRequest request, HttpServletResponse
+          	  response, Object handler) throws Exception {
+       	 //对用户的 token 做判断
+       	 String token = request.getParameter("token");
+       	 if (StringUtils.isBlank(token)) {
+           	 return false;
+       	 }
+       	 //如果用户 token 不为空，则校验用户在 redis 中是否失效
+        	TbUser tbUser = ssoServiceFeign.getUserByToken(token);
+       	 if (tbUser == null) {
+            	eturn false;
+        }
+       	 return true;
+    }
+}
