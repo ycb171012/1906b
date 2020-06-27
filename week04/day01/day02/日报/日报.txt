@@ -1,0 +1,709 @@
+2020.6.1 --- 日报
+  ElasticSearch介绍
+     什么是elasticsearch?
+  	    elasticsearch是基于lucene的全文检索服务器，对外提供restful接口
+
+     elasticsearch原理
+  	    正排索引：查字典时从第一页开始找，直到找到关键字为止（CTRL+F）
+  	    倒排索引：查字典时通过目录查找
+
+  	 逻辑结构：一个倒排索引表，由三部分组成
+  		document
+  		term
+  		term----关联----document
+  安装：ElasticSearch、Kibana、head
+     index管理：
+        创建index
+          PUT /java1906
+            {
+              "settings": {
+                "number_of_shards": 2,
+                "number_of_replicas": 0
+              }
+            }
+        修改index
+          PUT /java1906/_settings
+            {
+              "number_of_replicas" : 1
+            }
+        删除index
+          DELETE /java1906 [, other_index]
+     mapping管理
+        创建mapping
+          POST index_name/type_name/_mapping
+        查询mapping
+          GET /java1906/course/_mapping
+     document管理
+        创建document
+            Post语法：POST/index_name/type_name{fieldname:fieldvalue}
+            Put语法：PUT/index_name/type_name/id{field_name:field_value}
+        查询document
+            GET /index_name/type_name/id或
+            GET /index_name/type_name/_search?q=field_name:field_value
+        删除document
+            语法：DELETE/index_name/type_name/id
+
+
+2020.6.2 --- 日报
+   IK分词器
+      安装
+    	解压到plugs目录下，并重命名为ik
+
+      自定义词库
+    	IkAnalyzer.cfg.xml：配置扩展词典和停用词典
+    	main.dic：扩展词典
+    	stopwords.dic：停用词典
+
+      两种分词模式
+    	ik_smart：粗粒度拆分
+    	ik_max_word：细粒度拆分
+
+   field详细介绍
+      field的属性
+    	type：field的类型
+    	analyzer：分词模式、ik_smart、ik_max_word
+    	index：创建doucument和分词列表
+    	field索引不存储：
+    		"_source":{
+    			"excludes":{"description"}
+    		}
+
+      常用的field类型
+    	文本字段：text
+
+    	关键字字段：keyword 索引时不分词
+
+    	日期字段：date
+
+    	数字字段：long、integer、double、float
+
+      field属性设置的标准
+    			           标准
+    		分词         是否有意义
+    		索引         是否搜索
+    		存储         是否展示
+   springboot整合ES
+     整合步骤
+    	1、pom.xml
+    		elasticsearch、elasticsearch-rest-high-level-client
+
+    	2、application.yml
+    		spring:
+    		  data:
+    		    elasticsearch:
+    		      cluster-nodes: 192.168.233.134:9200
+    	3、config
+    		@Configuration
+    		public class ElasticsearchConfig extends ElasticsearchProperties{
+
+    			@Bean
+    			public RestHighLevelClient getRestHighLevelClient() {
+    			String[] hosts = getClusterNodes().split(",");
+    			HttpHost[] httpHosts = new HttpHost[hosts.length];
+    			for (int i = 0; i < httpHosts.length; i++) {
+    			    String h = hosts[i];
+    			    httpHosts[i] = new HttpHost(h.split(":")[0],
+    							Integer.parseInt(h.split(":")[1]));
+    			}
+    				return new RestHighLevelClient(RestClient.builder(httpHosts));
+    			}
+    		}
+
+     删除索引库
+        DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest("java1906");
+    	restHighLevelClient.indices().delete(deleteIndexRequest,RequestOptions.DEFAULT);
+     创建索引库
+    	CreateIndexRequest createIndexRequest = new CreateIndexRequest("java1906");
+    	restHighLevelClient.indices().create(createIndexRequest,RequestOptions.DEFAULT)
+
+
+2020.6.3 --- 日报
+     添加文档
+        IndexRequest indexRequest = new IndexRequest("java1906", "course", "1");
+        restHighLevelClient.index(indexRequest,RequestOptions.DEFAULT);
+     批量添加文档
+        bulkRequest.add(new IndexRequest("java1906", "course","2").source("{\"name\":\"php实战\",\"description\":\"php谁都不服\",\"studymodel\":\"201001\",\"price\":\"5.6\"}", XContentType.JSON));
+       	bulkRequest.add(new IndexRequest("java1906", "course","3").source("{\"name\":\"net实战\",\"description\":\"net从入门到放弃\",\"studymodel\":\"201001\",\"price\":\"7.6\"}", XContentType.JSON));
+        restHighLevelClient.bulk(bulkRequest,RequestOptions.DEFAULT);
+     修改文档
+         UpdateRequest updateRequest = new UpdateRequest("java1906", "course", "1");
+         restHighLevelClient.update(updateRequest,RequestOptions.DEFAULT);
+     删除文档
+         DeleteRequest deleteRequest = new DeleteRequest("java1906","course","1");
+         restHighLevelClient.delete(deleteRequest,RequestOptions.DEFAULT);
+     查询文档
+        GetRequest getRequest = new GetRequest("java1906","course","1");
+        restHighLevelClient.get(getRequest,RequestOptions.DEFAULT);
+     DSL查询
+        match_all查询
+        	SearchRequest searchRequest = new SearchRequest("java1906");
+        	searchRequest.types("course");
+        	SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        	searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+        	searchRequest.search(searchSourceBuilder)
+        	restHighLevelClient.search(searchRequest,RequestOptions.DEFAULT);
+        分页查询
+        	SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        	searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+        	searchSourceBuilder.form(1);
+        	searchSourceBuilder.size(2);
+        	searchSourceBuilder.sort("price",SortOrder.DESC);
+        match查询
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+            searchSourceBuilder.query(QueryBuilders.matchQuery("name", "spring开发").operator(Operator.AND));
+            searchRequest.source(searchSourceBuilder);
+            searchResponse = restHighLevelClient.search(searchRequest,RequestOptions.DEFAULT);
+        multi_match查询
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+            searchSourceBuilder.query(QueryBuilders.multiMatchQuery("开发","name","description"));
+            searchRequest.source(searchSourceBuilder);
+            searchResponse = restHighLevelClient.search(searchRequest,RequestOptions.DEFAULT);
+        bool查询
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+            BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+            boolQueryBuilder.must(QueryBuilders.matchQuery("name", "开发"));
+            boolQueryBuilder.must(QueryBuilders.matchQuery("description","开发"));
+            searchSourceBuilder.query(boolQueryBuilder);
+            searchRequest.source(searchSourceBuilder);
+            searchResponse = restHighLevelClient.search(searchRequest,RequestOptions.DEFAULT);
+        filter查询
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+            BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+            boolQueryBuilder.must(QueryBuilders.matchQuery("name","开发"));
+            boolQueryBuilder.filter(QueryBuilders.rangeQuery("price").gte(10).lte(100))
+            searchSourceBuilder.query(boolQueryBuilder);
+            searchRequest.source(searchSourceBuilder);
+            searchResponse = restHighLevelClient.search(searchRequest,RequestOptions.DEFAULT);
+
+
+2020.6.4 --- 日报
+     搭建ES集群
+        拷贝节点elasticsearch-1，修改elasticsearch.yml
+        查看集群健康状态：GET _cluster/health
+    展示商品信息导入到索引库
+        创建工程usian_search_service
+            pom：elasticsearch-rest-high-level-client、elasticsearch
+            application.yml：spring:
+                                datasource:
+                                    driver-class-name: com.mysql.jdbc.Driver
+                                    url: jdbc:mysql://127.0.0.1:3306/usian?characterEncoding=UTF-8
+        创建usian_search_feign
+        创建usian_search_web
+            application.yml：ribbon:
+                              ConnectTimeout: 60000、  ReadTimeout: 60000
+        usian-manage-web
+            修改src\api\base.js
+                baseSearchUrl:"/search_api"
+                importAll:"/frontend/searchItem/importAll" // 一键导入商品数据到索引库
+            修改src\api\index.js
+               axios.post(base.baseSearchUrl + base.importAll,null,{timeout:50000});
+            修改src\pages\Product\ProductList\index.vue
+            修改vue.config.js
+
+
+2020.6.5 --- 日报
+ 商品搜索
+    usian_search_service
+         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+         HighlightBuilder highlightBuilder = new HighlightBuilder();
+                    highlightBuilder.preTags("<font color='red'>");
+                    highlightBuilder.postTags("</font>");
+                    highlightBuilder.field("item_title");
+                    searchSourceBuilder.highlighter(highlightBuilder);
+    新增商品同步索引库
+        common_mapper
+            SearchItemMapper：SearchItem getItemById(Long itemId);
+            SearchItemMapper.xml：
+                        a.id,
+                		a.title item_title,
+                		a.sell_point item_sell_point,
+                		a.price item_price,
+                		a.image item_image,
+                		b.name item_category_name,
+                		c.item_desc item_desc
+                	FROM
+                		tb_item a
+                	JOIN tb_item_cat b ON a.cid = b.id
+                	JOIN tb_item_desc c ON a.id = c.item_id
+                	WHERE a.status = 1
+                	  AND a.id=#{itemId}
+        usian_search_service
+            pom：spring-boot-starter-amqp
+            application.yml：
+                spring:
+                  rabbitmq:
+                    host: 192.168.29.134
+                    username: admin
+                    password: 1111
+                    virtual-host: /
+            service：
+                SearchItem searchItem = searchItemMapper.getItemById(Long.valueOf(itemId));
+                IndexResponse indexResponse = restHighLevelClient.index(indexRequest,RequestOptions.DEFAULT);
+            listerner：
+                value = @Queue(value="search_queue",durable = "true"),
+                exchange = @Exchange(value="item_exchage",type= ExchangeTypes.TOPIC),
+                key= {"item.*"}
+        usian_item_service
+            pom.xml：spring-boot-starter-amqp
+            application.yml：
+                spring:
+                  rabbitmq:
+                    host: 192.168.233.132
+                    username: admin
+                    password: 1111
+                    virtual-host: /
+
+
+
+2020.6.8 --- 日报
+
+商品详情
+
+mysql： 太多人点商品详情的话，访问量大，mysql吃不消
+es： 从海量数据一查 查一堆数据，用来查详情不合适。es强项没显示出来
+
+方案一：可以使用thymeleaf 页面静态化
+	1.创建商品详情的thymeleaf模板
+	2.创建rabbitmq消息消费者，收到消息后生成静态页面（D:/data/26774635182.html）
+							商品id
+
+	3.搭建nginx服务器，返回静态页面
+
+方案二：redis
+	1.redis缓存商品详情（不能影响正常逻辑）
+		a.先查询redis，如果有直接返回
+		b.再查询mysql，把并把查询结果装到redis中再返回
+	
+	2.如何保证redis不满？如何保证redis中都是热点商品？
+		设置商品的失效时间：86400
+
+	3.怎么保存商品信息（数据类型）？
+	ITEM_INFO:123456:BASE
+	ITEM_INFO:123456:DESC
+	ITEM_INFO:123456:PARAM
+
+缓存穿透
+       缓存穿透是指缓存和数据库中都没有数据，而用户不断发起请求则这些 请求会穿过缓存直接访问数据库，如发起为id为“-1”的数据或id为特别大不存在的数据。假如有恶意攻击，就可以利用这个漏洞，对数据库造成压力，甚至压垮数据库。
+
+解决方案----缓存空对象：
+当存储层不命中后，即使返回的空对象也将其缓存起来，同时会设置一个过期时间（避免控制占用更多的存储空间），之后再访问这个数据将会从缓存中获取，保护了后端数据源；
+	/********************解决缓存穿透************************/
+		if(tbItem == null){
+			//把空对象保存到缓存
+			redisClient.set(ITEM_INFO + ":" + itemId + ":"+ BASE,null);
+			//设置缓存的有效期
+			redisClient.expire(ITEM_INFO + ":" + itemId + ":"+ BASE,30);
+			return tbItem;
+		}
+		//把数据保存到缓存
+		redisClient.set(ITEM_INFO + ":" + itemId + ":"+ BASE,tbItem);
+		//设置缓存的有效期
+		redisClient.expire(ITEM_INFO + ":" + itemId + ":"+ BASE,ITEM_INFO_EXPIRE);
+		return tbItem;
+	}
+
+缓存击穿
+缓存击穿，是指一个key非常热点，在不停的扛着大并发，大并发集中对这一个key不停进行访问，当这个key在失效的瞬间，持续的大并发就穿破缓存，直接请求数据库，就像在一个屏障上凿开了一个洞。
+
+解决方案：
+
+1. 设置热点数据永远不过期
+2. 加分布式锁
+
+common_redis
+ 修改RedisClient
+    public Boolean setnx(String key, Object value, long time) {
+        try {
+            return redisTemplate.opsForValue().setIfAbsent(key, value, time,
+                                                           TimeUnit.SECONDS);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+ @Override
+    public TbItem selectItemInfo(Long itemId){
+        //1、先查询redis,如果有直接返回
+        TbItem tbItem = (TbItem) redisClient.get(ITEM_INFO+":"+itemId+":"+BASE);
+        if(tbItem!=null){
+            return tbItem;
+        }
+        /*****************解决缓存击穿***************/
+        if(redisClient.setnx(SETNX_BASE_LOCK_KEY+":"+itemId,itemId,30L)){
+            //2、再查询mysql,并把查询结果缓存到redis,并设置失效时间
+            tbItem = tbItemMapper.selectByPrimaryKey(itemId);
+
+            /*****************解决缓存穿透*****************/
+            if(tbItem!=null){
+                redisClient.set(ITEM_INFO+":"+itemId+":"+BASE,tbItem);
+                redisClient.expire(ITEM_INFO+":"+itemId+":"+BASE,ITEM_INFO_EXPIRE);
+            }else{
+                redisClient.set(ITEM_INFO+":"+itemId+":"+BASE,null);
+                redisClient.expire(ITEM_INFO+":"+itemId+":"+BASE,30L);
+            }
+            redisClient.del(SETNX_BASC_LOCK_KEY+":"+itemId);
+            return tbItem;
+        }else{
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+           return selectItemInfo(itemId);
+        }
+    }
+
+
+2020.6.9 --- 日报
+雪崩：缓存集中过期   解决方案：失效时间随机或按商品类别设置不同的失效时间
+
+一、单点登录介绍
+	1、什么是单点登录？
+		SSO英文全称Single Sign On，单点登录，登录一次处处可用
+
+	2、思路
+		存(登录)：redis(token,user)       cookie(token_key,token)
+					
+		取(查询用户)：cookie(token)--------->redis(user)
+
+密码加密的方法：MD5Utils----String pwd = MD5Utils.digest(user.getPassword());
+
+校验：
+用户名是否存在
+密码是否6-20位
+手机号是否存在
+邮箱是否正确
+
+为什么使用单点登陆，
+比如说布置两台tomcat，用户登陆访问的是tomcat1. 登陆的信息在tomcat1的session里存着。
+但是其他的模块如果用登陆信息的话，nginx访问了tomcat2.  tomcat2里没有存用户。造成了session丢失
+
+redis 和session 都可以设置失效时间，而且是 key-value 形式
+为了防止session丢失，将登陆的信息存到redis。因为所有的用户访问的是同一个redis
+
+注册
+就是一个添加的方法
+
+登陆
+//1.把password加密
+ //2.判断用户名密码是否正确
+//3.登陆成功把user装到redis，并设置失效时间
+//4.返回结果 : map(token,userid,username)
+
+根据token查用户：
+每个模块都显示用户信息，因为要确定redis中有这个用户信息
+为了安全起见，cooki中有，也会去redis中查一把。
+根据token 去查
+查到了说明用户已经登陆，然后显示用户名
+每个模块都有用户名查一次的重置一次失效时间
+
+退出登陆
+删除token
+
+
+
+
+2020.6.10--- 日报
+1. 用户未登录状态下：在不登陆的情况下把购物车信息写入cookie
+   	优点：
+   		1、不占用服务端存储空间
+   		2、代码实现简单。
+   		3、用户体验好
+   	缺点：
+   		1、cookie中保存的容量有限。最大4k
+   		2、把购物车信息保存在cookie中，更换设备购物车信息不能同步。
+
+代码思路：// 1、从cookie中查询商品列表。
+	//2、添加商品到购物车
+	//3、把购车商品列表写入cookie
+
+
+2. 用户已登录状态下：把购物车信息保存到服务端的 Redis 中
+   	优点：
+   		1、更换设备购物车信息可以同步
+   	缺点：
+   		1、占用服务端存储空间
+
+代码思路：// 1、从cookie中查询商品列表。
+	//2、添加商品到购物车
+	//3、把购车商品列表写入Redis
+
+
+2020.6.16--- 日报
+ 用户身份确认：
+ 1、使用springmvc的拦截器拦截所有订单的请求
+     2、业务逻辑
+       从cookie中取token
+      根据token调用sso服务查询用户信息（也就是redis中查询）。
+      如果查不到用户信息则跳转到登录页面。
+                查询到用户信息放行
+       然后走controller，先从redis查用户购物车中所有商品map集合，然后根据前台传来所结算商品id数组，可得出所要结算的商品保存到list集合并返回给前台
+
+2020.6.17--- 日报
+订单有三张表：
+	订单明细表（订单商品表）
+	订单物流表
+	订单表
+
+订单号需求是什么？
+1、唯一
+2、可读性高：纯数字
+
+如何生成：
+	时间戳：可能会重复
+	手机号：重复，一个人一个手机号
+	时间加随机数：也有可能会重复
+	时间戳 +自增id：可行（使用Redis的INCR命令完成）（初值：100544）
+	时间戳+用户id/手机号 ：可行
+	时间戳+用户id +店铺id ：可行，适用于C2C、B2C平台
+
+
+代码思路：
+提交订单：
+ 	1、向订单表插入数据。
+	2、向订单明细表插入数据
+	3、向订单物流表插入数据
+	4、返回订单id
+扣减库存：
+ 	1、向订单表插入数据。
+	2、向订单明细表插入数据
+	3、向订单物流表插入数据
+	//发布消息到mq，完成扣减库存	
+	4、返回订单id
+
+2020.6.18--- 日报
+关闭超时订单：
+	写一个定时任务：定义一个job，让它扫描订单表
+	如果超时了：
+	1.--修改订单的状态为关闭状态，结束时间、关闭时间为当前时间
+	2.--把订单中商品库存的数量加回去
+
+	判断超时：
+	状态是未付款：并且创建时间<=当前时间-2天
+	而且必须的是在线支付的订单，货到付款肯定不算。
+
+	定义触发条件：
+		理论上是需要实时触发（每秒触发一次）；
+		但是我们没那么多访问量，一分钟触发一次就行
+
+Quartz框架的使用思路：
+	job-任务-你要做什么事?
+	Trigger-触发器-你什么时候去做？
+	Scheduler-任务调度-你什么时候需要去做什么事？
+
+分布式service ：加库存防止加多
+	需要用到分布式锁setnx；
+	方法运行完释放锁，
+	如果方法异常，设置失效时间释放锁
+
+
+
+
+
+
+2020.6.19--- 日报
+
+一、代理模式
+ 1、作用：控制访问某个对象的方法，调用方法前可以做前置处理，调用方法后可以做后置处理（AOP的微观实现）
+ 2、角色：
+		抽象角色（接口）：定义公共对外方法
+		真实角色（周杰伦）：业务逻辑
+		代理角色（代理人）：调用真实角色完成业务逻辑，并可附加自己的操作
+
+3、静态代理缺陷：
+	     大量代码重复
+	     只能代理一种类型的对象
+4、动态代理
+	a、jdk自带的动态代理
+	     java.lang.reflect.InvocationHandler：通过invoke调用真实角色
+	     java.lang.reflect.Proxy：动态生成代理类的对象
+
+		好处：
+		     大量代码重复
+		     能代理任意类型的对象
+
+	b、Cglib的动态代理
+		和jdk代理的区别：没有接口
+		原理：生成代理类的子类，在子类中调用父类并可附加自己的操作
+二、AOP
+  1、aop概述：面向切面编程，扩展功能无须修改源代码
+  2、aop底层原理：横向抽取机制（有接口时jdk动态代理，无接口Cglib动态代理）
+  3、aop核心概念：
+			切点：要增强的方法
+			增强/通知：日志、事务
+			切面：把增强应用到切点上
+  4、aop操作
+	a、增强
+		public class MyAdvice{
+			public void log(){
+				sout("日志........")
+			}
+		}
+		<bean id="myAdvice" class="com.usian.advice.MyAdvice">
+	b、配置切点和切面（aop）
+		<aop:config>
+			//切点
+			<aop:point expression="* com.usian.service.*.*(..)" id="pointcut">
+
+			//切面：把增强应用到切点上
+			<aop:aspect ref="myAdvice">
+				<aop:before method="log" pointcut-ref="pointcut">
+			</aop:aspect>
+		</aop:config>
+
+分布式事务：
+	1.分布式事务产生的场景
+		两个service--->一个数据库
+		一个service--->两个数据库
+
+	2.可靠消息最终一致性方案介绍
+		可靠消息：消息成功消费
+		最终一致性：事务参与方最终完成事务
+
+	3.可靠消息最终一致性要解决的问题
+	      1.上游服务把消息成功发送：
+		本地消息表：消息记录表（orderId、status）、quartz(定时扫描，发送消息)
+
+	      2.下游服务把消息成功消费
+		持久化+手动确认方案：持久化（mq宕机消息不丢失）、手动确认（任务处理失败消息还在容器中）
+	
+	      3.消息幂等
+	 	记录消息的消费记录，存在了不管它，不存在进行任务处理
+
+
+
+
+
+
+2020.6.22--- 日报
+
+    ItemMQListener
+         public void listener(String msg, Channel channel, Message message)throws IOException {
+                LocalMessage localMessage = JsonUtils.jsonToPojo(msg, LocalMessage.class);
+                //进行幂等判断，防止ack应为网络问题没有送达，导致扣减库存业务重复执行
+                DeDuplication deDuplication =
+                    deDuplicationService.selectDeDuplicationByTxNo(localMessage.getTxNo());
+                if(deDuplication==null){
+                    //扣减库存
+                    Integer result =
+                        itemService.updateTbItemByOrderId(localMessage.getOrderNo());
+                    if(!(result>0)){
+                        throw new RuntimeException("扣减库存失败");
+                    }
+                    //记录成功执行过的事务
+                    deDuplicationService.insertDeDuplication(localMessage.getTxNo());
+                }else{
+                    System.out.println("=======幂等生效：事务"+deDuplication.getTxNo()
+                            +" 已成功执行===========");
+                }
+                channel.basicAck(message.getMessageProperties().getDeliveryTag(),false);
+            }
+    分布式日志:
+        ELK介绍:
+               ELK是Elasticsearch、Logstash、Kibana的简称（也称为 ELK Stack），是elastic公司提供的一套完整的日志收集以及展示的解决方案，
+            能够安全可靠地获取任何来源、任何格式的数据，然后实时地对数据进行搜索、分析和可视化。
+
+            - Elasticsearch：是开源的分布式全文检索服务器。
+            - Logstash：是一个具有实时传输能力的数据收集引擎，用来进行数据收集（如：读取文本文件）、解析，并将数据发送给ES。
+            - Kibana：数据分析与可视化平台，对Elasticsearch存储的数据进行可视化分析，通过表格的形式展现出来。
+
+        为什么要用 ELK？
+            一般大型系统都采用分布式架构，不同的模块部署在不同的服务器上，大规模分布式项目的日志面临的问题如下：
+            1. 文本搜索太慢怎么办？
+            2. 分布式环境下的日志如何查询？
+            3. 如何多维度查询？
+	
+
+
+
+
+2020.6.24--- 日报
+
+	一、mysql主从复制（安装mysql）
+ 		linux安装mysql
+		查看已安装mysql：rpm -qa|grep mysql
+		卸载：rpm -e --nodeps mysql-libs-5.1.7.1-1.e16.x86_64
+		解压安装包到指定文件夹：tar -zxvf mysql-5.6.31-linux-glibc2.5-x86_64.tar.gz -C /usr/java
+		进入/usr/java：cd /usr/java
+		改名mysql：mv mysql-5.6.31-linux-glibc2.5-x86_64 mysql
+		复制mysql配置文件：cd mysql 
+				cp support-files/my-default.cnf /etc/my.cnf
+				cp support-files/mysql.server /etc/rc.d/init.d/mysql
+		修改my.cnf  vim /etc/my.cnf
+		          	basedir = /usr/java/mysql
+			datadir = /usr/java/mysql/data
+			log-error = /usr/java/mysql/data/error.log
+			pid-file = /usr/java/mysql/data/mysql.pid
+			user = root
+			tmpdir = /tmp
+		初始化mysql：./scripts/mysql_install_db --user=root --basedir=/usr/java/mysql --datadir=/usr/java/mysql/data --pid-file=/usr/java/mysql/data/mysql.pid --tmpdir=/tmp
+		启动mysql：service mysql start 
+		关闭mysql：service mysql stop
+		重启mydql：service mysql restart
+		修改MySQL密码：mysql -u root 
+			            use mysql
+			            update user set password= password("1111") where user='root';
+			            flush privileges;
+		开放远程登陆权限：GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY '1111' WITH GRANT OPTION;
+ 				FLUSH PRIVILEGES;
+	二、mysql主从复制（配置）
+		主从复制简介
+		1. MySQL 默认支持主(master)从(slave)功能.
+		2. 主从复制效果：在主数据库中操作时,从同步进行变化.
+		3. 主从复制本质：主数据的操作写入到日志中,从数据库从日志中读取,进行操作.
+		主从复制要素
+		1. 开启日志功能
+   		2. 每个数据库需要有一个 server_id,主 server_id 值小于从server_id(标识从哪server写入的)
+   		3. 每个 mysql 都有一个 uuid,由于虚拟机直接进行克隆,需要修改uuid 的值(唯一识别码)
+   		4. 必须要在主数据库中有一个用户具有被从数据库操作的权限.
+		配置主从复制
+		配置主数据库
+		1.修改主数据库my.cnf 
+		  log_bin=master_log
+		  server_id=1
+		2.重启mysql：service mysql restart
+		3.通过命令可以观察主数据库在主从关系中状态: show master status
+		配置从数据库
+		1.修改server_id: server_id=2
+		2.data文件夹auto.cnf编写当前mysql的uuid
+		3.重启 mysql servIce：service mysql restart
+		4.修改slave：
+		 stop slave;
+		change master to master_host='主ip',master_user='root',master_password='1111',master_log_file='master_log.000001';
+		start slave
+		5.查看slave状态：首位slavestatus \G;
+		6.验证主从关系：在主数据库中新建数据库,新建表,添加数据,观察从数据库的
+	二、mycat
+		1、什么是Mycat：是一个国产的数据库中间件，前身是阿里的cobar
+		2、分库分表：
+		垂直分割（分库）：指按照业务将表进行分类，分布到不同的数据库上面，这样也就将数据或者说压力分担到不同的库上面
+		水平分割（分表）：一个表格的数据按照行分割到多个节点上
+		典型的分片规则：根据主键编号进行hash、求余
+		3、mycat安装
+			1.下载mycat并上传到linux：官方网站：http://www.mycat.org.cn
+			2.解压mycat
+				tar -zxvf Mycat-server-1.6-RELEASE-20161028204710-linux.tar.gz -C /usr/java
+			3.启动和关闭mycat
+				启动：./mycat start
+				停止：./mycat stop
+				重启：./mycat restart
+				查看状态：./mycat status
+			4.mycat重要概念：
+				1、逻辑库（schema）：一个包含了所有数据库的逻辑上的数据库
+				2、逻辑表（table）：一个包含了所有表的逻辑上的表
+				3、数据主机（dataHost）：数据库软件安装到哪个服务器上
+				4、数据节点（dataNode）：数据库软件中的 database
+				5、分片规则（rule）：拆分规则
+		4、分片规则
+			1.auto-sharding-long 规则
+				以 500 万为单位,实现分片规则：
+				1-500 万保存在 db1 中, 500 万零 1 到 1000 万保存在 db2 中,1000 万零 1 到 1500 万保存在 db3 中
+			2.crc32slot规则：在 CRUD 操作时,根据具体数据的 crc32 算法计算,数据应该保存在哪一个dataNode 中
+				分片字段使用主键
+				tableRule：一个表一个
+				数据库节点数量
+		5、配置mycat的分库分表和读写分离
+			1、schema.xml作用：逻辑库、逻辑表、dataNode、分片规则
+			2、rule.xml：分片规则
+			3、server.xml：mycat的用户名、密码和权限	
